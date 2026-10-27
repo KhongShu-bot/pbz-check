@@ -201,6 +201,11 @@
       <h2>检测明细</h2>
       <div class="grid" id="detail"></div>
 
+      <details id="rawBox" style="margin-top:16px" hidden>
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted);list-style:none">查看浏览器上报的原始显卡标识（识别异常时把它发给我）</summary>
+        <p id="rawText" style="margin-top:8px;font-size:12px;color:var(--muted);word-break:break-all;font-family:Consolas,monospace"></p>
+      </details>
+
       <div class="form">
         <label class="f">显卡（识别错了就手动选）
           <select id="selGpu"></select>
@@ -427,6 +432,11 @@
 
   var TYPE_LABEL = { dt: '桌面独显', nb: '笔记本独显', ig: '核显', other: '其他平台' };
 
+  /* 彩蛋：只出现在下拉框最底部，不参与自动识别 */
+  var EGGS = [
+    { name: 'RTX 强哥', score: 999, vram: 64, type: 'egg' }
+  ];
+
   var MIN_SCORE = 21;   /* GTX 1660 / RX 5500 XT */
   var REC_SCORE = 42;   /* RTX 3060 Ti / RX 6700 XT */
   var MIN_VRAM = 6;
@@ -437,7 +447,7 @@
   var PRELOAD_SIZE = 300;
 
   var state = {
-    gpuName: '', gpuScore: 0, gpuRaw: '', gpuType: '',
+    gpuName: '', gpuScore: 0, gpuRaw: '', gpuType: '', rawOriginal: '',
     vram: 8, ram: 16, threads: 8, disk: 160,
     isMobile: false
   };
@@ -470,10 +480,16 @@
   function render() {
     var r = judge();
     var badge = $('vBadge'), title = $('vTitle'), desc = $('vDesc');
+    var egg = state.gpuType === 'egg';
     var unsupported = state.gpuType === 'other';
-    var unknown = !unsupported && !state.gpuScore;
+    var unknown = !egg && !unsupported && !state.gpuScore;
 
-    if (unsupported) {
+    if (egg) {
+      badge.className = 'badge ok';
+      badge.textContent = '强哥认证';
+      title.textContent = '强哥说：随便玩';
+      desc.textContent = '这张卡只存在于传说里。既然强哥出手了，画质直接拉满，出了问题报强哥的名字。';
+    } else if (unsupported) {
       badge.className = 'badge bad';
       badge.textContent = '不支持';
       title.textContent = '这台设备跑不了';
@@ -521,7 +537,9 @@
 
     /* 建议 */
     var adv = [];
-    if (unsupported) {
+    if (egg) {
+      adv.push('强哥认证只是彩蛋。要真实判定，请在下拉框里选择你实际使用的显卡。');
+    } else if (unsupported) {
       adv.push('当前设备无法运行 Windows 版《影之刃零》，配置问题可以忽略。');
     } else if (unknown) {
       adv.push('显卡未识别：请在下方「检测明细」里手动选择你的显卡型号，判定会自动刷新。');
@@ -539,15 +557,19 @@
     if (!r.diskOk) adv.push('硬盘只剩 ' + state.disk + ' GB，装不下 145 GB 本体（还需要预留更新与缓存空间），建议先清理。');
     else if (!r.preloadOk) adv.push('硬盘 ' + state.disk + ' GB 够装本体，但不够预载解包（需 300 GB）—— 建议解锁后直接下载，不要点预下载。');
     if (state.gpuType === 'nb') adv.push('检测到笔记本显卡：同型号性能受功耗（TGP）影响很大，轻薄本可能只有游戏本的七成，实际体验以你的机器为准。');
-    if (r.pass && r.rec) adv.push('配置足够，记得装在 SSD 上，并提前更新显卡驱动。');
+    if (r.pass && r.rec && !egg) adv.push('配置足够，记得装在 SSD 上，并提前更新显卡驱动。');
     if (adv.length === 0) adv.push('各项均达标。');
     $('advice').innerHTML = adv.map(function (t) { return '<li>' + t + '</li>'; }).join('');
 
     /* 明细卡 */
     var gpuCls = r.gpuRec ? 'ok' : r.gpuOk ? 'warn' : 'bad';
     var cpuCls = r.cpuRec ? 'ok' : r.cpuOk ? 'warn' : 'bad';
+    var gpuNote = egg ? '强哥的实力，无法量化' : '相对性能 ' + state.gpuScore + ' / 100（RTX 5080）';
+    if (state.gpuType === 'ig') {
+      gpuNote += '<br><a href="#selGpu" style="color:#e04a5f;text-decoration:underline">有独立显卡？点这里手动选择 →</a>';
+    }
     var detail = [
-      { k: '显卡', v: (state.gpuName || '未识别') + ((state.gpuType === 'dt' || state.gpuType === 'nb') ? '（' + TYPE_LABEL[state.gpuType] + '）' : ''), n: '相对性能 ' + state.gpuScore + ' / 100（RTX 5080）', c: gpuCls, t: r.gpuRec ? '推荐' : r.gpuOk ? '最低' : '不足' },
+      { k: '显卡', v: (state.gpuName || '未识别') + ((state.gpuType === 'dt' || state.gpuType === 'nb') ? '（' + TYPE_LABEL[state.gpuType] + '）' : ''), n: gpuNote, c: gpuCls, t: egg ? '彩蛋' : (r.gpuRec ? '推荐' : r.gpuOk ? '最低' : '不足') },
       { k: '显存', v: state.vram + ' GB', n: '最低 6 GB · 推荐 8 GB', c: state.vram >= REC_VRAM ? 'ok' : state.vram >= MIN_VRAM ? 'warn' : 'bad', t: state.vram >= REC_VRAM ? '推荐' : state.vram >= MIN_VRAM ? '最低' : '不足' },
       { k: 'CPU', v: state.threads + ' 线程', n: '最低 12 · 推荐 16', c: cpuCls, t: r.cpuRec ? '推荐' : r.cpuOk ? '最低' : '不足' },
       { k: '内存', v: state.ram + ' GB', n: '最低 16 GB', c: r.ramOk ? 'ok' : 'bad', t: r.ramOk ? '达标' : '不足' },
@@ -557,6 +579,12 @@
       return '<div class="item ' + d.c + '"><span class="tag">' + d.t + '</span>' +
         '<div class="k">' + d.k + '</div><div class="v">' + d.v + '</div><div class="n">' + d.n + '</div></div>';
     }).join('');
+
+    var rb = $('rawBox');
+    if (rb && (state.rawOriginal || state.gpuRaw)) {
+      rb.hidden = false;
+      $('rawText').textContent = state.rawOriginal || state.gpuRaw;
+    }
   }
 
   /* ---------- 显卡字符串清洗与匹配 ---------- */
@@ -612,6 +640,11 @@
       });
       if (opts) html += '<optgroup label="' + g.label + '">' + opts + '</optgroup>';
     });
+    var eggOpts = '';
+    EGGS.forEach(function (e) {
+      eggOpts += '<option value="' + e.name + '">' + e.name + '</option>';
+    });
+    if (eggOpts) html += '<optgroup label="彩蛋（别当真）">' + eggOpts + '</optgroup>';
     sel.innerHTML = html;
     if (selectedName) sel.value = selectedName;
   }
@@ -619,6 +652,9 @@
   function findGpuByName(name) {
     for (var i = 0; i < GPUS.length; i++) {
       if (GPUS[i].name === name) return GPUS[i];
+    }
+    for (var j = 0; j < EGGS.length; j++) {
+      if (EGGS[j].name === name) return EGGS[j];
     }
     return null;
   }
@@ -628,6 +664,7 @@
     state.isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
     var raw = getGpuRaw();
+    state.rawOriginal = raw || '';
     state.gpuRaw = cleanGpuString(raw);
     var hit = matchGpu(state.gpuRaw);
 
@@ -647,6 +684,18 @@
     state.ram = (navigator.deviceMemory && navigator.deviceMemory >= 8) ? 16 : 8;
 
     fillGpuSelect(hit ? hit.name : '');
+
+    /* 如果上次手动指定过独显，而这次只认到核显，就沿用手动选择 */
+    var pickedName = null;
+    try { pickedName = localStorage.getItem('pbz-gpu-pick'); } catch (e) {}
+    var pickedGpu = pickedName ? findGpuByName(pickedName) : null;
+    if (pickedGpu && (!hit || hit.type === 'ig')) {
+      state.gpuName = pickedGpu.name;
+      state.gpuScore = pickedGpu.score;
+      state.vram = pickedGpu.vram;
+      state.gpuType = pickedGpu.type;
+      fillGpuSelect(pickedGpu.name);
+    }
 
     /* 硬盘：用 storage quota 粗略反推（quota ≈ 剩余空间 60%），失败则给默认值 */
     var fallback = 160;
@@ -687,10 +736,14 @@
         state.gpuName = g.name;
         state.gpuScore = g.score;
         state.vram = g.vram;
+        state.gpuType = g.type;
         $('selVram').value = String(g.vram);
+        try { localStorage.setItem('pbz-gpu-pick', g.name); } catch (e) {}
       } else {
         state.gpuName = '未选择';
         state.gpuScore = 0;
+        state.gpuType = '';
+        try { localStorage.removeItem('pbz-gpu-pick'); } catch (e) {}
       }
       render();
     });
